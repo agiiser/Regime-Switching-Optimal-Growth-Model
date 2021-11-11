@@ -1,0 +1,179 @@
+% This is the code relevant to the article 
+%"Regime Switching Optimal Growth Model with Risk Sensitive Preferences" 
+%coauthored by Anindya Goswami, Nimit Rana, and Tak Kuen Siu
+function output = example()
+tic
+b = 0.9;  % beta - discount parameter
+g = 1;    % gamma - risk sensitivity parameter
+bg = b/g;
+pmatrix = [0.5, 0.4, 0.1; 0.25, 0.5, 0.25; 0.1, 0.4, 0.5]; % transition probability matrix
+n = 18; %number of grids for numerical integration
+mx=200; %number of grids for numerical maximization for fixed regime case.
+z = (1/n)*(0:n-1); %z=1 is excluded as the integrand is 0 at z=1 
+z1 = icdf("lognormal",z,0,1); % inputs of integrand at grids
+t = ones(1,3); % theta
+
+x = [0.01, 0.1, 0.2, 0.6, 1.5, 3, 6, 12, 20, 30, 45];
+
+% REGIME CASE
+VF = ones(length(t),length(x));   %Declaration and Initialization
+yVal = ones(length(t),length(x)); %Declaration and Initialization
+for j=1:length(x)
+ supMat = supvf2(x(j));           %Calling function supvf2 <- vfy2 <- supvf1 <- vfy1 <- pf
+ VF(:,j) = supMat(1,:)';
+ yVal(:,j) = supMat(2,:)';
+end 	
+
+% NON-REGIME CASE
+VFd = ones(1,length(x));          %Declaration and Initialization
+yVald = ones(1,length(x));        %Declaration and Initialization
+for j=1:length(x)
+ supMatd = supvfd2(x(j));         %Calling function supvfd2 <- vfyd2 <- supvfd1 <- vfyd1 <- pf
+ VFd(:,j) = supMatd(1,1);
+ yVald(:,j) = supMatd(2,1);
+end
+%%% Plotting Figure 1: "Value function: Numerical solution to (4.1)"
+plot(x,VF(1,:),'r',x,VF(2,:),'g',x,VF(3,:),'b',x,VFd(1,:),'--k')
+legend({'regime 1','regime 2', 'regime 3', 'eternal regime'},'Location','northwest')
+xlabel('Income x')
+ylabel('Value Function V(x)')
+%%% Plotting Figure 2: "Optimal InvestmentRatio: Numerical solution of(4.3)"
+plot(x,yVal(1,:),'r--o', x,yVal(2,:),'g--o', x,yVal(3,:),'b--o', x,yVald(1,:),'k--*')
+legend({'regime 1','regime 2', 'regime 3', 'eternal regime'},'Location','northeast')
+xlabel('Income x')
+ylabel('Optimal Investment Ratio \phi^\ast(x)/x')
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%% End of the main code. The functions are defined below
+%MODEL FUNCTIONS
+function u = utility(a)
+s = 0.5; % sigma in the definition of u
+    u = a^s;
+end 
+function f = pf(y,z) % pf - production function
+% we could take output as [f_1,f_2,f_3] instead of f
+w_1 = [0.3, 0.5, 0.9]; % w_1 function in the production function for three scenarios
+    f_1 = y^(w_1(1))*z;
+    f_2 = y^(w_1(2))*z;
+    f_3 = y^(w_1(3))*z;
+      f = [f_1,f_2,f_3];
+end
+
+% NON-REGIME FUNCTIONS
+function Vd1 = vfyd1(x,y) % Output depends on y. In (4.1) we take SUP on y. This we do later.
+            f = pf(y,z1(1)); % it's a vector wrt theta. Note that, z1(1)=F^{-1}(0)=0.
+            tempd1 = exp((-1)*g*v_0(f(2))); % here v_0(f(2)) is an array wrt theta^prime
+            sum = 0.5*tempd1(2);% it is a scalar. % 1/2 weight is for the Trapezoidal rule.
+        for i=2:n
+            f = pf(y,z1(i)); % it's a vector wrt theta.
+            tempd1 = exp((-1)*g*v_0(f(2))); % here v_0(f(2)) is an array wrt theta^prime
+            sum = sum+tempd1(2);% it is a scalar % Note that the integrand is 0 at z=1.
+        end
+        Vtemp= bg*log(sum/n); 
+        Vd1 = utility(x-y) - Vtemp; % this is a value for given x and y.    
+end
+function  supd = supvfd1(x)
+    y = (0:mx)*x/mx;
+    ly=length(y);
+    vfd1 = zeros(1,ly);         %Declaration and Initialization
+    for i=1:ly
+        vfd1(i) = vfyd1(x,y(i));
+    end
+    supd = max(vfd1);
+end
+function Vd2 = vfyd2(x,y)
+            f = pf(y,z1(1)); % it's a vector wrt theta. Note that, z1(1)=F^{-1}(0)=0.
+            tempd2 = exp((-1)*g*supvfd1(f(2))); % % here supvfd1(f(2)) is a scalar
+        sumd2 = 0.5*tempd2; % 1/2 weight is for the Trapezoidal rule. 
+        for i=2:n
+            f = pf(y,z1(i)); % it's a vector wrt theta
+            tempd2 = exp( (-1)*g*supvfd1(f(2))); % here supvfd1(f(2)) is a scalar
+            sumd2 = sumd2+tempd2;% it is a scalar % Note that the integrand is 0 at z=1.
+        end
+        Vtemp2= bg*log(sumd2/n);
+        Vd2 = utility(x-y) - Vtemp2; 
+end
+ function s2upMatd = supvfd2(x)
+    y = (0:mx)*x/mx;
+    ly=length(y);
+    vfd2 = zeros(1,ly);           %Declaration and Initialization
+    for i=1:ly
+        vfd2(i) = vfyd2(x,y(i));
+    end
+    [s2up1,i1] = max(vfd2(:));
+    s2upMatd = [s2up1;i1/ly];%[s2up1;i1*x/ly];
+ end
+
+% REGIME FUNCTIONS
+function V_0 = v_0(a) % The first iteration starting with the zero function, produces utility function. 
+    V_0 = utility(a)*t;
+end
+% That is fed into the second iteration. 
+function V = vfy1(x,y) % vf - Second iteration of value function before we take SUP on y. This we do later.
+% Note that here we do not write theta explicity because we get a vector wrt theta as output. 
+    V = zeros(1,3); 
+    for m=1:3 % this is for theta.
+            f = pf(y,z1(1)); % it's a vector wrt theta. Note that, z1(1)=F^{-1}(0)=0.
+            temp = exp((-1)*g*v_0(f(m))); % here v_0(f(m)) is an array wrt theta^prime.
+            pm =  pmatrix(m,:)*temp';% it is a scalar and m is just to show that we are in mth scenario wrt theta. This is sum wrt theta^prime in (4.1).
+        sum = 0.5*pm; % 1/2 weight is for the Trapezoidal rule. 
+        for i=2:n
+            f = pf(y,z1(i)); % it's a vector wrt theta
+            temp = exp((-1)*g*v_0(f(m))); % here v_0(f(m)) is an array wrt theta^prime
+                % here f(m) implies that we have mth secnario on theta in (4.1)
+            pm =  pmatrix(m,:)*temp';% it is a scalar and m is just to show that we are in mth scenario wrt theta. This is sum wrt theta^prime in (4.1).
+            % here we are switching integal and sum in (4.1)
+            sum = sum+pm; % Note that the integrand is 0 at z=1.
+        end
+        Vtemp= bg*log(sum/n);
+        V(m) = utility(x-y) - Vtemp; % this is a value for mth scenario wrt 
+        % theta for given x and y.    
+    end
+end
+function  sup = supvf1(x)
+    y = (0:30)*x/30;
+    ly=length(y);
+    vf = zeros(3,ly);         %Declaration and Initialization
+    for i=1:ly
+        vf(:,i) = vfy1(x,y(i));
+    end
+    sup1 = max(vf(1,:));
+    sup2 = max(vf(2,:));
+    sup3 = max(vf(3,:));
+    sup = [sup1,sup2,sup3];
+end
+function V2 = vfy2(x,y) % vf - Third iteration of value function before we take SUP on y in (4.1).
+    V2 = zeros(1,3);        %Declaration and Initialization
+    for m=1:3 % this is for theta.
+            f = pf(y,z1(1)); % it's a vector wrt theta. Note that, z1(1)=F^{-1}(0)=0.
+            temp2 = exp( (-1)*g*supvf1(f(m))); % here supvf1(f(m)) is an array wrt theta^prime
+            pm2 =  pmatrix(m,:)*temp2';% it is a scalar and m is just to show that we are in mth scenario wrt theta. This is sum wrt theta^prime in (4.1).
+        sum2 = 0.5*pm2;  % 1/2 weight is for the Trapezoidal rule. 
+        for i=2:n
+            f = pf(y,z1(i)); % it's a vector wrt theta
+            temp2 = exp( (-1)*g*supvf1(f(m))); % here supvf1(f(m)) is an array wrt theta^prime
+                % here f(m) implies that we have mth secnario on theta in (4.1)
+            pm2 =  pmatrix(m,:)*temp2';% it is a scalar and m is just to show that we are in mth scenario wrt theta. This is sum wrt theta^prime in (4.1).
+            % here we are switching integal and sum in (4.1)
+            sum2 = sum2+pm2; %For integrating wrt nu(dz) in Lebegue's approach, we first sum and later divide by n.
+        end
+        Vtemp2= bg*log(sum2/n);
+        V2(m) = utility(x-y) - Vtemp2; % this is a value for mth scenario wrt 
+        % theta for given x and y.    
+    end
+end
+function s2upMat = supvf2(x)
+    y = (0:30)*x/30;
+    ly=length(y);
+    vf = zeros(3,ly);         %Declaration and Initialization
+          for i=1:ly
+          vf(:,i) = vfy2(x,y(i));   %Calling function vfy2
+          end
+    [s2up1,i1] = max(vf(1,:));
+    [s2up2,i2] = max(vf(2,:));
+    [s2up3,i3] = max(vf(3,:));
+    s2up = [s2up1,s2up2,s2up3];
+    maxY = [i1/ly,i2/ly,i3/ly];
+    s2upMat = [s2up;maxY];
+end
+output=1;
+toc
+end
